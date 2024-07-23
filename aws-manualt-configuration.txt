@@ -1,2 +1,10 @@
+#Create role for clusture access
+AWS-Services, EKS-Clusture
+
+AmazonEKSClusterPolicy Policy to role that will access clusture
+
 #Update you .kubeconfig
 aws eks --region us-east-1 update-kubeconfig --name clusture-name
+
+#Create role to access Node
+
