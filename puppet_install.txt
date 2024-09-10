@@ -1,0 +1,465 @@
+Master Node:
+
+sudo hostname puppetmaster.test.org
+hostname -f
+sudo hostnamectl set-hostname puppetmaster.test.org
+hostnamectl
+sudo nano /etc/hosts
+
+sudo hostnamectl set-hostname puppetagent.test.org
+hostnamectl
+sudo nano /etc/hosts
+
+127.0.1.1    localhost puppetmaster.test.org
+sudo systemctl restart systemd-hostnamed
+sudo reboot
+
+
+
+
+sudo nano /etc/hosts
+<agent-ip> puppetagent.test.org
+
+Now install puppetserver in master node
+sudo apt-get update
+wget https://apt.puppet.com/puppet7-release-focal.deb
+sudo dpkg -i puppet7-release-focal.deb
+sudo apt-get update
+sudo apt-get install puppetserver -y
+
+sudo nano /etc/default/puppetserver
+Update 
+JAVA_ARGS="-Xms400m -Xmx400m - Djruby.logger.class=com.puppetlabs.jruby_utils.jruby.Slf4jLogger"
+
+sudo systemctl start puppetserver
+#list certificates
+sudo ls -l /etc/puppetlabs/puppet/ssl/certs/
+#edit
+sudo nano /etc/puppetlabs/puppet/puppet.conf
+Add following
+[main]
+server = puppetmaster.test.org
+
+
+Step 2: Setup puppet-agent in the slave node
+sudo hostname puppetagent.test.org
+hostname -f
+sudo nano /etc/hosts
+#add
+<master-ip> puppetmaster.test.org
+
+sudo apt-get update
+wget https://apt.puppet.com/puppet7-release-focal.deb
+sudo dpkg -i puppet7-release-focal.deb
+sudo apt-get update
+sudo apt-get install puppet-agent -y
+sudo /opt/puppetlabs/bin/puppet resource service puppet ensure=running enable=true
+source /etc/profile.d/puppet-agent.sh
+export PATH=/opt/puppetlabs/bin:$PATH
+#to check path:
+echo $PATH
+Edit the following file
+sudo nano /etc/puppetlabs/puppet/puppet.conf
+
+To add,
+[main]
+server = puppetmaster.test.org
+
+[agent]
+runinterval = 30m
+
+
+
+
+Step3: Generate a certificate from the agent
+
+sudo ls -l /etc/puppetlabs/puppet/ssl/certs/
+sudo /opt/puppetlabs/bin/puppet agent --test --waitforcert 60
+
+it will be in pending state the go to master node
+Step4: Sign the slave-generated certificate from the master node
+sudo /opt/puppetlabs/bin/puppetserver ca sign --certname puppetagent.test.org
+
+On Master node
+sudo /opt/puppetlabs/bin/puppetserver ca list --all
+
+On Master:
+sudo nano /etc/puppetlabs/code/environments/production/manifests/site.pp
+# execute 'apt-get update'
+exec { 'apt-update': # exec resource named 'apt-update'
+command => '/usr/bin/apt-get update' # command this resource will run
+}
+# install apache2 package
+package { 'apache2':
+require => Exec['apt-update'], # require 'apt-update' before installing
+ensure => installed,
+}
+# ensure apache2 service is running
+service { 'apache2':
+ensure => running,
+}
+
+
+Step 6: Initiate from the slave server to run manifest
+sudo /opt/puppetlabs/bin/puppet agent --test
+
+
+# Exaple
+file { '/home/ubuntu/example_file.txt':
+  ensure  => present,             # Ensure the file exists
+  content => "This is some content for the file.\n",  # Content of the file
+  mode    => '0644',              # File permissions (optional)
+  owner   => 'root',              # File owner (optional)
+  group   => 'root',              # File group (optional)
+}
+
+
+
+#DEFAULT Puppt PATH
+nano ~/.bashrc
+
+export PATH=$PATH:/opt/puppetlabs/bin
+source ~/.bashrc
+puppet module list
+
+
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+/etc/puppetlabs/code/environments/production/manifests
+# site.pp
+node 'puppetagent1.test.org' {
+  include apache
+}
+
+node 'puppetagent2.test.org' {
+   include apache
+  # Other configurations for node2 or leave empty if no configuration is needed
+}
+
+/etc/puppetlabs/code/environments/production/modules/apache/manifests/init.pp
+# apache/manifests/init.pp
+class apache {
+  package { 'apache2':
+    ensure => installed,
+  }
+
+  service { 'apache2':
+    ensure => running,
+    enable => true,
+    require => Package['apache2'],
+  }
+
+  file { '/var/www/html/index.html':
+    ensure  => file,
+    content => "<html><body><h1>Apache is working!</h1></body></html>",
+    require => Package['apache2'],
+  }
+}
+
+
+
+/
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+Puppet
+        Resource
+        Classes
+        Modules
+
+Resource:
+        resource_type {'name':
+                attribute => value,
+        }
+
+        file { '/etc/hosts':
+          ensure  => file,
+          content => "127.0.0.1 localhost", 
+        }
+
+        service {'ssh':
+                ensure => running,
+        }
+        Resource: Cron, Exec, File, Group, Notify, Package, Service, User
+
+        We can combile multiple resource in to class
+        class openssh{
+                package {'openssh-server':
+                ensure => installed,
+                }
+                file {'etc/ssh/sshd_config':
+                        ensure => file
+                        owner => 'root'
+                        mode => '0600'
+                }
+                service {'ssh':
+                        ensure => running,
+                }
+        }
+
+        #Declaration
+        node node1 {
+          include openssh
+        }
+
+
+        my_module/
+        ├── manifests/
+        │   └── init.pp
+        ├── files/
+        ├── templates/
+        ├── lib/
+        ├── facts.d/
+        ├── tests/
+        └── metadata.json
+
+
+
+Manifest:
+        Resource and Classes are wrriten in Manifest file with .pp extension
+
+
+Each node collect information that called Facts. and send those fact to master. Then master compile document called catalog. which describe how agent should be configured
+- agent download catalog from master and compare facts with catalog
+- Did the necessary change and send it to master
+
+
+MetaParameter
+
+Notify: Specifies that changes to this resource should trigger a notification to another resource
+file { '/etc/hosts':
+  ensure  => file,
+  content => "127.0.0.1 localhost",
+  notify  => Service['nginx'],
+}
+
+Subscribe:  Similar to notify, but it triggers a refresh of the current resource when the subscribed resource changes
+service { 'nginx':
+  ensure    => running,
+  subscribe => File['/etc/nginx/nginx.conf'],
+}
+
+Require: Ensures that the current resource is applied only after the specified resource has been applied.
+package { 'nginx':
+  ensure => installed,
+}
+
+service { 'nginx':
+  ensure  => running,
+  require => Package['nginx'],
+}
+
+Before: Ensures that the current resource is applied before the specified resource.
+file { '/etc/important_file':
+  ensure  => file,
+  before  => Service['important_service'],
+}
+
+
+
+Resource:
+
+
+////////////////
+//////////////////
+sudo nano /etc/puppetlabs/puppet/puppet.conf
+
+[main]
+manifest = /path/to/your/new/manifests/site.pp
+modulepath = /path/to/your/new/modules
+
+
+sudo systemctl restart puppetserver
+
+
+///////////////////////
+////////////////////
+cd /etc/puppetlabs/code/environments/production/modules/
+mkdir -p nginx/manifests
+nano nginx/manifests/init.pp
+
+# nginx/manifests/init.pp
+class nginx {
+  package { 'nginx':
+    ensure => installed,
+  }
+
+  service { 'nginx':
+    ensure => running,
+    enable => true,
+    require => Package['nginx'],
+  }
+
+  file { '/usr/share/nginx/html/index.html':
+    ensure  => file,
+    content => "<html><body><h1>nginx is working!</h1></body></html>",
+    require => Package['nginx'],
+  }
+}
+
+Update the site.pp File
+nano /etc/puppetlabs/code/environments/production/manifests/site.pp
+
+# site.pp
+node 'node1' {
+  include apache
+}
+
+node 'node2' {
+  include nginx
+}
+
+
+
+
+############################
+############################
+###
+###  Install docker
+##
+##
+###############################
+############################
+
+/opt/puppetlabs/bin/puppet module list
+/opt/puppetlabs/bin/puppet module install puppetlabs-docker
+sudo /opt/puppetlabs/bin/puppet module install --modulepath /etc/puppetlabs/code/environments/production/modules puppetlabs-docker
+/opt/puppetlabs/bin/puppet module list
+/opt/puppetlabs/bin/puppet module list --modulepath /etc/puppetlabs/code/environments/production/modules
+
+sudo nano /etc/puppetlabs/puppet/puppet.conf
+[server]
+vardir = /opt/puppetlabs/server/data/puppetserver
+logdir = /var/log/puppetlabs/puppetserver
+rundir = /var/run/puppetlabs/puppetserver
+pidfile = /var/run/puppetlabs/puppetserver/puppetserver.pid
+codedir = /etc/puppetlabs/code
+
+[main]
+server = puppetmaster.test.org
+
+sudo nano /etc/puppetlabs/code/environments/production/manifests/docker.pp
+
+node 'puppetagent.test.org' {
+   include 'docker'
+
+  docker::image { 'nginx':
+    ensure => 'latest',
+  }
+
+docker::run { 'my_nginx':
+    image          => 'nginx',
+    ports          => ['80:80'],
+    #restart_policy => 'always',
+  }
+}
+
+node 'puppetagent.test.org' {
+  include 'docker'
+
+  # Ensure the 'nginx' image is pulled first
+  docker::image { 'nginx':
+    ensure => 'latest',
+  }
+
+  # Ensure the container 'my_nginx' is started only after the 'nginx' image is pulled
+  docker::run { 'my_nginx':
+    image          => 'nginx',
+    ports          => ['80:80'],
+    restart_policy => 'always',
+    require        => Docker::Image['nginx'],
+  }
+}
+
+
+node /puppetagent.*/ {
+   include 'docker'
+   docker::image { 'ubuntu':
+  image_tag => 'precise'
+}
+
+  docker::image { 'nginx':
+    ensure => 'latest',
+  }
+
+docker::run { 'my_nginx':
+    image          => 'nginx',
+    ports          => ['80:80'],
+    #restart_policy => 'always',
+  }
+
+}
+
+
+
+####################################
+####################################
+###
+###  MYSQL
+###
+####################################
+####################################
+/opt/puppetlabs/bin/puppet module install puppetlabs-mysql
+sudo /opt/puppetlabs/bin/puppet module install --modulepath /etc/puppetlabs/code/environments/production/modules puppetlabs-mysql
+
+node 'puppetagent.test.org' {
+  include mysql
+
+  # Install MySQL server
+  class { 'mysql::server':
+    root_password => hiera('mysql::server::root_password'),
+    override_options => {
+      'mysqld' => {
+        'bind-address' => '0.0.0.0',
+      },
+    },
+  }
+
+  # Ensure MySQL service is running and enabled
+  service { 'mysqld':
+    ensure => running,
+    enable => true,
+  }
+}
+
+
+
+####
+Docker and apache
+54.172.249.44 
+node 'puppetagent.test.org' {
+  # Include the Docker class
+  include docker
+
+  # Define Docker image resource
+  docker::image { 'nginx':
+    ensure => 'latest',
+  }
+
+  # Define Docker container resource
+  docker::run { 'my_nginx':
+    image          => 'nginx',
+    ports          => ['8081:80'],
+    # restart_policy => 'always',
+    require        => Docker::Image['nginx'],
+  }
+
+  # Define the Apache package and service
+  package { 'apache2':
+    ensure => installed,
+  }
+
+  service { 'apache2':
+    ensure => running,
+    enable => true,
+    require => Package['apache2'],
+  }
+
+  # Ensure the index.html file is in place
+  file { '/var/www/html/index.html':
+    ensure  => file,
+    content => "<html><body><h1>Apache is working!</h1></body></html>",
+    require => Package['apache2'],
+  }
+}
