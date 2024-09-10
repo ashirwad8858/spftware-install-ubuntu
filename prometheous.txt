@@ -1,0 +1,343 @@
+159
+14282
+14055   loki promtail
+#!/bin/bash
+
+# Exit immediately if a command exits with a non-zero status
+set -e
+
+# Update the package lists
+echo "Updating package lists..."
+sudo apt-get update
+
+# Download the Prometheus tarball
+echo "Downloading Prometheus..."
+wget https://github.com/prometheus/prometheus/releases/download/v2.47.0/prometheus-2.47.0.linux-amd64.tar.gz
+
+# Extract the tarball
+echo "Extracting Prometheus..."
+tar vxf prometheus-2.47.0.linux-amd64.tar.gz
+
+# Create the Prometheus system group and user
+echo "Creating Prometheus user and group..."
+sudo groupadd --system prometheus
+sudo useradd -s /sbin/nologin --system -g prometheus prometheus
+
+# Create necessary directories
+echo "Creating directories..."
+sudo mkdir -p /etc/prometheus
+sudo mkdir -p /var/lib/prometheus
+
+# Move Prometheus binaries and configuration files
+echo "Moving binaries and configuration files..."
+cd prometheus-2.47.0.linux-amd64
+sudo mv prometheus /usr/local/bin
+sudo mv promtool /usr/local/bin
+sudo mv console* /etc/prometheus
+sudo mv prometheus.yml /etc/prometheus
+
+# Set ownership of the Prometheus files and directories
+echo "Setting file ownership..."
+sudo chown prometheus:prometheus /usr/local/bin/prometheus
+sudo chown prometheus:prometheus /usr/local/bin/promtool
+sudo chown prometheus:prometheus /etc/prometheus
+sudo chown -R prometheus:prometheus /etc/prometheus/consoles
+sudo chown -R prometheus:prometheus /etc/prometheus/console_libraries
+sudo chown -R prometheus:prometheus /var/lib/prometheus
+
+# Create and configure the Prometheus service file
+echo "Creating Prometheus service file..."
+sudo tee /etc/systemd/system/prometheus.service > /dev/null <<EOF
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+ExecStart=/usr/local/bin/prometheus \
+ --config.file /etc/prometheus/prometheus.yml \
+ --storage.tsdb.path /var/lib/prometheus/ \
+ --web.console.templates=/etc/prometheus/consoles \
+ --web.console.libraries=/etc/prometheus/console_libraries
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd, enable and start Prometheus service
+echo "Reloading systemd and starting Prometheus service..."
+sudo systemctl daemon-reload
+sudo systemctl enable prometheus
+sudo systemctl start prometheus
+
+# Check the status of the Prometheus service
+echo "Checking Prometheus status..."
+sudo systemctl status prometheus
+
+echo "Prometheus setup is complete."
+
+  - job_name: "prometheus"
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "myserver"
+    static_configs:
+      - targets: ["localhost:9100"]
+  - job_name: "docker"
+    static_configs:
+      - targets: ["localhost:9323"]
+
+
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["localhost:8070"]
+
+
+    - job_name: 'spring'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['10.0.1.240:8080']
+
+        - job_name: 'spring'
+                metrics_path: '/actuator/health'
+                static_configs:
+                - targets: ['10.0.1.240:8080']
+        - job_name: 'spring'
+                metrics_path: '/actuator/http.server.requests'
+                static_configs:
+                - targets: ['10.0.1.240:8080']
+
+https://medium.com/swlh/application-monitoring-with-prometheus-and-grafana-part-3-1c4ad5e1b042
+https://medium.com/@patelromil/application-monitoring-using-spring-boot-actuators-part-1-dab8576f4db6
+
+http://54.243.4.64:8080/actuator/health
+http://54.243.4.64:8080/actuator/metrics/http.server.requests
+
+
+
+#///// Grafana
+#!/bin/bash
+
+# Exit immediately if a command exits with a non-zero status
+set -e
+
+# Update the package lists
+echo "Updating package lists..."
+sudo apt-get update
+
+# Install prerequisites
+echo "Installing prerequisites..."
+sudo apt-get install -y software-properties-common
+
+# Add Grafana APT repository
+echo "Adding Grafana APT repository..."
+wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add -
+sudo add-apt-repository "deb https://packages.grafana.com/oss/deb stable main"
+
+# Update package lists again to include Grafana repository
+echo "Updating package lists again..."
+sudo apt-get update -y
+
+# Install Grafana
+echo "Installing Grafana..."
+sudo apt-get install -y grafana
+
+# Enable and start Grafana service
+echo "Enabling and starting Grafana service..."
+sudo systemctl enable grafana-server
+sudo systemctl start grafana-server
+
+# Check the status of Grafana service
+echo "Checking Grafana status..."
+sudo systemctl status grafana-server
+
+echo "Grafana installation and setup is complete."
+
+
+# NOde Exporter
+#!/bin/bash
+
+# Exit immediately if a command exits with a non-zero status
+set -e
+
+# Variables
+NODE_EXPORTER_VERSION="1.7.0"
+NODE_EXPORTER_TAR="node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz"
+NODE_EXPORTER_DIR="/etc/node_exporter"
+NODE_EXPORTER_URL="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/${NODE_EXPORTER_TAR}"
+SYSTEMD_SERVICE_PATH="/etc/systemd/system/node_exporter.service"
+PROMETHEUS_CONFIG_PATH="/etc/prometheus/prometheus.yml"
+
+# Update package lists
+echo "Updating package lists..."
+sudo apt-get update
+
+# Install prerequisites
+echo "Installing prerequisites..."
+sudo apt-get install -y wget tar
+
+# Download Node Exporter
+echo "Downloading Node Exporter version ${NODE_EXPORTER_VERSION}..."
+sudo wget ${NODE_EXPORTER_URL} -O ${NODE_EXPORTER_TAR}
+
+# Extract Node Exporter
+echo "Extracting Node Exporter..."
+sudo tar xzf ${NODE_EXPORTER_TAR}
+
+# Remove the tarball
+echo "Removing tarball..."
+sudo rm -rf ${NODE_EXPORTER_TAR}
+
+# Create system group and user for Node Exporter
+echo "Creating Node Exporter user and group..."
+sudo groupadd --system node_exporter || echo "Group node_exporter already exists."
+sudo useradd -s /sbin/nologin --system -g node_exporter node_exporter || echo "User node_exporter already exists."
+
+# Create directory for Node Exporter binary
+echo "Creating directory for Node Exporter..."
+sudo mkdir -p ${NODE_EXPORTER_DIR}
+
+# Move Node Exporter to /etc/node_exporter
+echo "Moving Node Exporter to ${NODE_EXPORTER_DIR}..."
+if sudo mv node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64/* ${NODE_EXPORTER_DIR}/; then
+    echo "Node Exporter moved successfully."
+else
+    echo "Error moving Node Exporter. Check if the extracted files are present."
+    exit 1
+fi
+
+# Clean up extracted directory
+sudo rmdir node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64
+
+# Ensure binary is executable and owned by node_exporter
+echo "Setting permissions..."
+sudo chown -R node_exporter:node_exporter ${NODE_EXPORTER_DIR}
+sudo chmod +x ${NODE_EXPORTER_DIR}/node_exporter
+
+# Create and configure the Node Exporter service file
+echo "Creating Node Exporter service file..."
+sudo tee ${SYSTEMD_SERVICE_PATH} > /dev/null <<EOF
+[Unit]
+Description=Node Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=${NODE_EXPORTER_DIR}/node_exporter
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd, enable, and restart Node Exporter service
+echo "Reloading systemd and starting Node Exporter service..."
+sudo systemctl daemon-reload
+sudo systemctl enable node_exporter
+sudo systemctl restart node_exporter
+
+# Check the status of the Node Exporter service
+echo "Checking Node Exporter status..."
+sudo systemctl status node_exporter
+sudo journalctl -u node_exporter
+
+# Update Prometheus configuration
+echo "Updating Prometheus configuration..."
+sudo tee -a ${PROMETHEUS_CONFIG_PATH} > /dev/null <<EOF
+
+  - job_name: "myserver"
+    static_configs:
+      - targets: ["localhost:9100"]
+EOF
+
+# Restart Prometheus to apply changes
+echo "Restarting Prometheus service..."
+sudo systemctl restart prometheus
+
+echo "Node Exporter and Prometheus configuration are complete."
+
+
+
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+ 
+  vi /etc/docker/daemon.json
+  {
+  "metrics-addr" : "127.0.0.1:9323",
+  "experimental" : true
+}
+
+systemctl restart docker
+curl localhost:9323/metrics
+
+{
+  "exec-opts": [
+    "native.cgroupdriver=cgroupfs"
+  ],
+  "bip":"172.12.0.1/24",
+  "registry-mirrors": [
+    "http://docker-registry-mirror.kodekloud.com"
+  ],
+  "metrics-addr" : "127.0.0.1:9323",
+  "experimental" : true
+}
+
+
+vi /etc/prometheus/prometheus.yml
+
+  - job_name: "docker"
+    static_configs:
+      - targets: ["localhost:9323"]
+          
+engine_daemon_container_states_containers
+
+
+
+version: '3.4'
+services:
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor
+    container_name: cadvisor
+    privileged: true
+    devices:
+      - "/dev/kmsg:/dev/kmsg"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - 8070:8080
+          
+          curl localhost:8070/metrics
+          
+vi /etc/prometheus/prometheus.yml
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["localhost:8070"]
+          
+          
+         container_cpu_system_seconds_total{job="cadvisor", name="opt-redis3-1"}
+         
+         
+         
+         
+         
+         
+         
+         
+         
+#loki    
+docker run -d \
+  --name=loki \
+  -p 3100:3100 \
+  -v /path/to/loki-config.yml:/etc/loki/local-config.yml \
+  grafana/loki:latest \
+  -config.file=/etc/loki/local-config.yml
