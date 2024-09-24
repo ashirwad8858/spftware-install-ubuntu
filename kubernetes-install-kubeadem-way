@@ -1,0 +1,118 @@
+sudo hostnamectl set-hostname master
+sudo hostnamectl set-hostname node01
+
+sudo nano /etc/hosts
+172.31.88.5 master
+127.0.0.1 localhost master
+
+
+
+
+
+Master and worker
+ALl nodes
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+br_netfilter
+EOF
+
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+
+sudo sysctl --system
+
+
+Container run time
+
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.ipv4.ip_forward = 1
+EOF
+
+# Apply sysctl params without reboot
+sudo sysctl --system
+
+sysctl net.ipv4.ip_forward
+https://github.com/containerd/containerd/blob/main/docs/getting-started.md
+
+# Add Docker's official GPG key:
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+
+sudo apt-get install containerd.io
+
+systemctl status containerd
+Configuring the systemd cgroup driver
+
+ps -p 1
+
+sudo nano /etc/containerd/config.toml
+sudo reebot
+
+
+sudo apt-get update
+
+sudo apt-get install -y apt-transport-https ca-certificates curl
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+sudo apt-get update
+
+  # To see the new version labels
+sudo apt-cache madison kubeadm
+
+sudo apt-get install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 kubectl=1.30.0-1.1
+
+sudo apt-mark hold kubelet kubeadm kubectl
+
+
+kubelet --version
+
+
+
+NExt
+
+Master node
+IP_ADDR=$(ip addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+kubeadm init --apiserver-cert-extra-sans=master --apiserver-advertise-address $IP_ADDR --pod-network-cidr=10.244.0.0/16 --cri-socket
+
+
+mkdir -p $HOME/.kube
+
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+
+
+root@controlplane:~> kubeadm token create --print-join-command
+kubeadm join 192.133.43.3:6443 --token b68tyg.8qtnz7pwe7zqs4fi --discovery-token-ca-cert-hash sha256:a3793ea96e136d50cb06a5f380c134d00f3f9596a28ffb1dce110995eb29ea4d
+
+
+
+curl -LO https://raw.githubusercontent.com/flannel-io/flannel/v0.20.2/Documentation/kube-flannel.yml
+
+  args:
+  - --ip-masq
+  - --kube-subnet-mgr
+  add here
+  - --iface=eth0
+
+kubectl apply -f kube-flannel.yml
+
+controlplane ~ ➜  kubectl get nodes
+NAME           STATUS   ROLES           AGE   VERSION
+controlplane   Ready    control-plane   15m   v1.30.0
+node01         Ready    <none>          15m   v1.30.0
