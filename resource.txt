@@ -1,0 +1,3 @@
+https://k21academy.com/docker-kubernetes/three-node-kubernetes-cluster/#2
+
+https://phoenixnap.com/kb/install-kubernetes-on-ubuntu
